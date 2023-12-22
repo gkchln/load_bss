@@ -17,8 +17,6 @@ head(df)
 T <- nrow(df)
 plot(1:T, df$Italy, type = "l")
 
-library(tidyr)
-
 # Pivot wider
 df_fda <- df[,c(load_cols, "day", "daytype", "hour")]
 df_fda <- pivot_wider(df_fda, id_cols = "hour", names_from = c(day, daytype), values_from = load_cols)
@@ -27,7 +25,7 @@ df_fda <- df_fda[,colSums(is.na(df_fda)) == 0]
 df_fda <- as.data.frame(df_fda)
 rownames(df_fda) <- as.numeric(df_fda$hour)
 df_fda$hour <- NULL
-head(df_fda)
+write.csv(t(df_fda), file = 'data/daily_curves.csv', row.names = TRUE)
 
 # Smoothing ----------------------------------------------------
 T <- 23
@@ -42,9 +40,9 @@ df_fda_scaled <- scale(df_fda)
 #basis <- create.fourier.basis(rangeval=range(1:T), nbasis=nbasis)
 
 # Set parameters
-m <- 5           # spline order 
-degree <- m-1    # spline degree 
-nbasis <- c(7, 9, 11, 13, 15, 17)
+#m <- 5           # spline order 
+#degree <- m-1    # spline degree 
+nbasis <- c(7, 9, 13, 17)
 
 df.fd.list <- list()
 for (p in nbasis) {
@@ -57,25 +55,27 @@ for (p in nbasis) {
 
 colors <- c("red", "green", "purple", "cyan")
 
-show.random.smoothed.curve <- function(df_fda_scaled, nbasis, df.fd.list) {
-  unit <- sample(colnames(df_fda), size = 1)
+show.random.smoothed.curve <- function(df_fda_scaled, nbasis, df.fd.list, unit='random') {
+  if (unit == 'random') {
+    unit <- sample(colnames(df_fda), size = 1)
+  }
   
   plt <- plot_ly(
     x = t,
     y = df_fda_scaled[,unit],
     type = "scatter",
-    mode = "markers+lines",
-    name = "Original function",
+    mode = "markers",
+    name = "Original function"
   )
   
   k <- 1
   for (p in nbasis) {
     df.fd <- df.fd.list[[as.character(p)]]
-    s.values <- eval.fd(t, df.fd)
+    s.values <- eval.fd(seq(0, 24, 0.1), df.fd)
     
     plt <- add_trace(
       plt,
-      x = t,
+      x = seq(0, 24, 0.1),
       y = s.values[,unit],
       type = "scatter",
       mode = "lines",
@@ -91,7 +91,7 @@ show.random.smoothed.curve <- function(df_fda_scaled, nbasis, df.fd.list) {
   plt <- plt %>% layout(
     title = unit,
     margin = list(t = 50),  # Set the top margin (adjust the value as needed),
-    showlegend = TRUE  # You can customize other layout options as well
+    showlegend = FALSE  # You can customize other layout options as well
   )
   
   print(plt)
@@ -99,7 +99,7 @@ show.random.smoothed.curve <- function(df_fda_scaled, nbasis, df.fd.list) {
 
 show.random.smoothed.curve(df_fda_scaled, nbasis, df.fd.list)
 
-# Best number of basis is 11. How do these smoothed curves look?
+# Best number of basis is 13. How do these smoothed curves look?
 
 nbasis <- 13
 df.fd <- df.fd.list[[as.character(nbasis)]]
@@ -131,17 +131,37 @@ plot.full.smoothed.curve(df_fda, s.values)
 fpca <- pca.fd(df.fd, nharm=nbasis, centerfns=TRUE)
 cumsum(fpca$varprop)
 
-plot_ly(
+plt <- plot_ly(
   x = 1:nbasis,
   y = cumsum(fpca$varprop),
   type = "scatter",
   mode = "lines+markers",
+  name = sprintf("Smoothed %d basis", nbasis)
 ) %>% layout(
   yaxis = list(range=c(0,1)),
-  xaxis = list(range=c(1,13.1)),
-  title = sprintf("Cumulative proportion of variance for %d basis", nbasis),
+  xaxis = list(range=c(1,15.1)),
+  title = "Cumulative proportion of variance",
   margin = list(t = 50)
   )
+
+plt <- add_trace(
+  plt,
+  x = 1:nbasis,
+  y = cumsum(fpca$varprop),
+  type = "scatter",
+  mode = "lines+markers",
+  name = sprintf("Smoothed %d basis", nbasis)
+  #line = list(color = colors[1])
+)
+
+# Add a title to the plot
+#plt <- plt %>% layout(
+#  title = unit,
+#  margin = list(t = 50),  # Set the top margin (adjust the value as needed),
+#  showlegend = FALSE  # You can customize other layout options as well
+#)
+
+print(plt)
 
 
 #plot(cumsum(fpca$varprop), type='b', xlab='number of components', 
@@ -168,38 +188,31 @@ df.scores[,"month"] <- sapply(rownames(df.scores), function(x) str_extract(x, ".
 df.scores[,"region"] <- sapply(rownames(df.scores), function(x) str_extract(x, "(.*)_.*_.*", group=1), USE.NAMES = FALSE)
 df.scores[,"daytype"] <- sapply(rownames(df.scores), function(x) str_extract(x, ".*_.*_(.*)", group=1), USE.NAMES = FALSE)
 
-month <- "10"
+month <- '02'
 daytype <- "Working day"
 region <- "North"
-df.plot <- df.scores[which((df.scores$month == month)&(df.scores$region == region)),]
+df.plot <- df.scores[which((df.scores$region == region)&(df.scores$daytype == daytype)),]
+#df.plot <- df.scores[which((df.scores$month == month)&(df.scores$daytype == daytype)),]
+#df.plot <- data.frame(df.scores)
 
+pcs <- c(3,4)
 plot_ly(
-  x = df.plot[,1],
-  y = df.plot[,2],
+  x = df.plot[,pcs[1]],
+  y = df.plot[,pcs[2]],
   type = "scatter",
   mode = "markers",
-  #colors = "Blues",
+  colors = "PuOr",
   marker = list(size=8),
-  color=df.plot[,"daytype"],
+  color=df.plot[,"month"],
   text = rownames(df.plot)
 ) %>% layout(
-  title = sprintf("Scores for month %s %s", month, daytype),
-  margin = list(t = 50)
+  title = sprintf("Scores for region %s", region),
+  margin = list(t = 50),
+  xaxis = list(title = sprintf("PC %s", pcs[1])),  # Add x-axis label
+  yaxis = list(title = sprintf("PC %s", pcs[2])), # Add y-axis label
+  showlegend = TRUE
 )
 
-plot_ly(
-  x = df.plot[,3],
-  y = df.plot[,4],
-  type = "scatter",
-  mode = "markers",
-  #colors = "Blues",
-  marker = list(size=8),
-  color=df.plot[,"region"],
-  text = rownames(df.plot)
-) %>% layout(
-  title = sprintf("Scores for month %s %s", month, daytype),
-  margin = list(t = 50)
-)
 
 pairs(df.plot[, 1:4], pch = 16, col = as.integer(as.factor(df.plot$daytype)), main = "Scatterplot Matrix")
 legend("topright", legend = levels(df.scores$region), col = 1:7, pch = 16, title = "Regions")
@@ -221,14 +234,15 @@ project.unit <- function(unit, nb.pc=4) {
 unit <- sample(colnames(df_fda), size = 1)
 plot(x=t, y=df_fda_scaled[,unit], lty=1, col='blue', lwd=2, main=unit, xlim = c(0,24))
 lines(df.fd[unit,], lty=1, col='blue', lwd=2)
-#lines(project.unit(unit, nb.pc = 1), col='red', main=unit, lwd=2)
-#lines(project.unit(unit, nb.pc = 2), col='red', main=unit, lwd=2, lty=2)
+lines(project.unit(unit, nb.pc = 1), col='red', main=unit, lwd=2)
+lines(project.unit(unit, nb.pc = 2), col='red', main=unit, lwd=2, lty=2)
 lines(project.unit(unit, nb.pc = 4), col='red', main=unit, lwd=2, lty=3)
 lines(project.unit(unit, nb.pc = 6), col='red', main=unit, lwd=2, lty=4)
 lines(project.unit(unit, nb.pc = 8), col='red', main=unit, lwd=2, lty=5)
 legend("topleft", legend=c("Original", "Smoothed", "1 PC", "2 PCs", "4 PCs", "6 PCs", "8 PCs"),
        col=c("blue", "blue", "red", "red", "red", "red", "red"),
-       lty=c(1, 1, 1, 2, 3, 4, 5),
+       lty=c(NA, 1, 1, 2, 3, 4, 5),
+       pch = c(1, NA, NA, NA, NA, NA, NA),
        lwd=2,
        title="Legend Title")
 
