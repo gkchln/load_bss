@@ -2,7 +2,7 @@ library(fda)
 library(tidyr)
 library(plotly)
 library(stringr)
-
+library(progress)
 
 # Read and process data -----------------------------------------------------------------------
 
@@ -30,7 +30,8 @@ write.csv(t(df_fda), file = 'data/daily_curves.csv', row.names = TRUE)
 # Smoothing ----------------------------------------------------
 T <- 23
 t <- 0:T
-df_fda_scaled <- scale(df_fda)
+#df_fda_scaled <- scale(df_fda)
+df_fda_scaled <- apply(df_fda, 2, function(col) col / sum(col)) # L1 normalization
 
 # Plot using matplot
 #matplot(rownames(df_fda_scaled), df_fda_scaled[,], type = "l", col = 1:ncol(df_fda_scaled),
@@ -49,7 +50,9 @@ for (p in nbasis) {
   #basis <- create.bspline.basis(rangeval=c(0,24), nbasis=p, norder=m)
   basis <- create.fourier.basis(rangeval=c(0,24), nbasis=p)
   df.fd <- Data2fd(y = as.matrix(df_fda_scaled), argvals = t, basisobj = basis)
-  df.fd.list[[as.character(p)]] <- df.fd
+  functionalPar <- fdPar(fdobj=df.fd, lambda=0)
+  df.smooth <- smooth.pos(argvals = t, y = as.matrix(df_fda_scaled), functionalPar)
+  df.fd.list[[as.character(p)]] <- df.smooth
 }
 #plot.fd(df.fd)
 
@@ -70,8 +73,10 @@ show.random.smoothed.curve <- function(df_fda_scaled, nbasis, df.fd.list, unit='
   
   k <- 1
   for (p in nbasis) {
-    df.fd <- df.fd.list[[as.character(p)]]
-    s.values <- eval.fd(seq(0, 24, 0.1), df.fd)
+    df.smooth <- df.fd.list[[as.character(p)]]
+    df.Wfd <- df.smooth$Wfdobj
+    s.values <- exp(eval.fd(seq(0, 24, 0.1), df.Wfd))
+    colnames(s.values) <- colnames(df_fda)
     
     plt <- add_trace(
       plt,
@@ -102,8 +107,10 @@ show.random.smoothed.curve(df_fda_scaled, nbasis, df.fd.list)
 # Best number of basis is 13. How do these smoothed curves look?
 
 nbasis <- 13
-df.fd <- df.fd.list[[as.character(nbasis)]]
-s.values <- eval.fd(seq(0, 24, 0.1), df.fd)
+df.smooth <- df.fd.list[[as.character(nbasis)]]
+df.Wfd <- df.smooth$Wfdobj
+s.values <- exp(eval.fd(seq(0, 24, 0.1), df.Wfd))
+colnames(s.values) <- colnames(df_fda)
 
 plot.full.smoothed.curve <- function(df_fda, s.values) {
   unit <- sample(colnames(df_fda), size = 1)
@@ -128,7 +135,7 @@ plot.full.smoothed.curve(df_fda, s.values)
 
 # FPCA ----------------------------------------------------------------------------------------
 ## Cumulative proportion of variance ----------------------------------------------------------
-fpca <- pca.fd(df.fd, nharm=nbasis, centerfns=TRUE)
+fpca <- pca.fd(df.Wfd, nharm=nbasis, centerfns=TRUE)
 cumsum(fpca$varprop)
 
 plt <- plot_ly(
@@ -176,7 +183,7 @@ plot(fpca$harmonics[1,],col=1,ylab='FPC1')
 abline(h=0,lty=2)
 plot(fpca$harmonics[2,],col=2,ylab='FPC2')
 
-# It seems that the data is not so badly approximated in a 4-dimensional space (85% of the variance
+# It seems that the data is not so badly approximated in a 3 or 4 dimensional space (85% or 90% of the variance
 # for the system with 13 basis functions)
 
 ## Scores -------------------------------------------------------------------------------------
@@ -191,19 +198,20 @@ df.scores[,"daytype"] <- sapply(rownames(df.scores), function(x) str_extract(x, 
 month <- '02'
 daytype <- "Working day"
 region <- "North"
-df.plot <- df.scores[which((df.scores$region == region)&(df.scores$daytype == daytype)),]
+df.plot <- df.scores[which((df.scores$region == region)),]
+#df.plot <- df.scores[which((df.scores$region == region)&(df.scores$daytype == daytype)),]
 #df.plot <- df.scores[which((df.scores$month == month)&(df.scores$daytype == daytype)),]
 #df.plot <- data.frame(df.scores)
 
-pcs <- c(3,4)
+pcs <- c(1,2)
 plot_ly(
   x = df.plot[,pcs[1]],
   y = df.plot[,pcs[2]],
   type = "scatter",
   mode = "markers",
-  colors = "PuOr",
+  #colors = "PuOr",
   marker = list(size=8),
-  color=df.plot[,"month"],
+  color=df.plot[,"daytype"],
   text = rownames(df.plot)
 ) %>% layout(
   title = sprintf("Scores for region %s", region),
@@ -221,28 +229,50 @@ legend("topright", legend = levels(df.scores$region), col = 1:7, pch = 16, title
 ## Approximation of the data in the projected space -------------------------------------------
 pcbasis <- fpca$harmonics[1:4,]
 
-s.values <- eval.fd(t, df.fd)
+x.smooth <- seq(0, 24, 0.1)
 
-project.unit <- function(unit, nb.pc=4) {
+s.values <- exp(eval.fd(x.smooth, df.Wfd))
+colnames(s.values) <- colnames(df_fda)
+
+project.unit <- function(unit, x=x.smooth, nb.pc=4) {
   res <- fpca$meanfd
   for (k in 1:nb.pc) {
     res <- res + df.scores[unit,k] * fpca$harmonics[k,]
   }
+  res <- exp(eval.fd(x, res))
   return(res)
 }
 
 unit <- sample(colnames(df_fda), size = 1)
 plot(x=t, y=df_fda_scaled[,unit], lty=1, col='blue', lwd=2, main=unit, xlim = c(0,24))
-lines(df.fd[unit,], lty=1, col='blue', lwd=2)
-lines(project.unit(unit, nb.pc = 1), col='red', main=unit, lwd=2)
-lines(project.unit(unit, nb.pc = 2), col='red', main=unit, lwd=2, lty=2)
-lines(project.unit(unit, nb.pc = 4), col='red', main=unit, lwd=2, lty=3)
-lines(project.unit(unit, nb.pc = 6), col='red', main=unit, lwd=2, lty=4)
-lines(project.unit(unit, nb.pc = 8), col='red', main=unit, lwd=2, lty=5)
-legend("topleft", legend=c("Original", "Smoothed", "1 PC", "2 PCs", "4 PCs", "6 PCs", "8 PCs"),
+lines(x=x.smooth, s.values[,unit], lty=1, col='blue', lwd=2)
+lines(x=x.smooth, project.unit(unit, nb.pc = 1), col='red', main=unit, lwd=2)
+lines(x=x.smooth, project.unit(unit, nb.pc = 2), col='red', main=unit, lwd=2, lty=2)
+lines(x=x.smooth, project.unit(unit, nb.pc = 3), col='red', main=unit, lwd=2, lty=3)
+lines(x=x.smooth, project.unit(unit, nb.pc = 4), col='red', main=unit, lwd=2, lty=4)
+lines(x=x.smooth, project.unit(unit, nb.pc = 6), col='red', main=unit, lwd=2, lty=5)
+legend("topleft", legend=c("Original", "Smoothed", "1 PC", "2 PCs", "3 PCs", "4 PCs", "6 PCs"),
        col=c("blue", "blue", "red", "red", "red", "red", "red"),
        lty=c(NA, 1, 1, 2, 3, 4, 5),
        pch = c(1, NA, NA, NA, NA, NA, NA),
        lwd=2,
        title="Legend Title")
 
+# 3 PCs seems really good
+
+
+## Exporting the PCA reconstruction of the data ------------------------------------------------
+export_projected <- function(nb.pc) {
+  res <- matrix(nrow = 0, ncol = length(t))
+  pb <- progress_bar$new(format = "[:bar] :percent ETA: :eta", total = dim(df_fda)[2])
+  for (unit in colnames(df_fda)) {
+    projected <- project.unit(unit, x=t, nb.pc=nb.pc)
+    res <- rbind(res, as.vector(projected))
+    pb$tick()
+  }
+  rownames(res) <- colnames(df_fda)
+  colnames(res) <- t
+  write.csv(res, file = sprintf('data/daily_curves_reconstructed_%dPCs.csv', nb.pc), row.names = TRUE)
+}
+
+export_projected(nb.pc = 4)
