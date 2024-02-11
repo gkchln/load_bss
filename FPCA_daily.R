@@ -107,16 +107,20 @@ show.random.smoothed.curve(df_fda_scaled, nbasis, df.fd.list)
 # Best number of basis is 13. How do these smoothed curves look?
 
 nbasis <- 13
+eval.grid <- seq(0, 24, 0.25)
 df.smooth <- df.fd.list[[as.character(nbasis)]]
 df.Wfd <- df.smooth$Wfdobj
-s.values <- exp(eval.fd(seq(0, 24, 0.1), df.Wfd))
+s.values <- exp(eval.fd(eval.grid, df.Wfd))
 colnames(s.values) <- colnames(df_fda)
+rownames(s.values) <- eval.grid
+# Export the smoothed curves
+write.csv(t(s.values), file = 'data/daily_curves_pos_smoothed_13b_15min.csv', row.names = TRUE)
 
 plot.full.smoothed.curve <- function(df_fda, s.values) {
   unit <- sample(colnames(df_fda), size = 1)
   
   plt <- plot_ly(
-    x = seq(0, 24, 0.1),
+    x = eval.grid,
     y = s.values[,unit],
     type = "scatter",
     mode = "lines",
