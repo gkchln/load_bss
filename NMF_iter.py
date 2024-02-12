@@ -23,7 +23,8 @@ def main(n_components, n_runs, infile, outfile):
     unit_info = input_df.index.str.extract(r'^(?P<region>[\w.]+)_(?P<year>\d{4})-(?P<month>\d{2})-\d{2}_(?P<daytype>[\w ]+)$').set_index(input_df.index)
     df = pd.concat([input_df, unit_info], axis=1)
     X = df.drop(unit_info.columns, axis=1)
-    X = X.div(X.sum(axis=1), axis=0)
+    # We want to keep a functional l1 norm of 1. In case of 15min interval load measures (so 97 measures), we normalise by the l1 norm of the vector divided by int(97 / 24) = 4
+    X = X.div(X.sum(axis=1), axis=0) * int(X.shape[1] / 24)
 
     # Specify NMF model
     model = NMF(
@@ -47,7 +48,7 @@ def main(n_components, n_runs, infile, outfile):
     for i in trange(n_runs):
         # Initialize W matrix with rows uniformely sampled on the simplex(n_components)
         W_init = initialize_W(X, n_components)
-        H_init = np.ones((n_components, p)) / p
+        H_init = (np.ones((n_components, p)) / p) * int(X.shape[1] / 24)
 
         # Run the solving algorithm
         W = model.fit_transform(
