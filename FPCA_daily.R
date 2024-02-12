@@ -3,19 +3,42 @@ library(tidyr)
 library(plotly)
 library(stringr)
 library(progress)
+library(lubridate)
 
 # Read and process data -----------------------------------------------------------------------
 
-df <- read.csv2('data/load_with_calendar.csv', sep = ",", header = TRUE, row.names = "Date")
+input_df <- read.csv2('data/load_with_calendar.csv', sep = ",", header = TRUE, row.names = "Date")
 
 load_cols = c("Calabria", "Centre.North", "Centre.South", "North", "Sardinia", "Sicily",
               "South")
 
-df[,load_cols] <- lapply(df[,load_cols], as.numeric)
-head(df)
+input_df[,load_cols] <- lapply(input_df[,load_cols], as.numeric)
+head(input_df)
 
-T <- nrow(df)
-plot(1:T, df$Italy, type = "l")
+T <- nrow(input_df)
+plot(1:T, input_df$Italy, type = "l")
+
+# Operation to duplicate the load at midnight to add it as point of previous day and next day
+rows.dup <- input_df[which(input_df$hour == 0),]
+rows.dup.names <- rownames(rows.dup)
+rows.dup.names.new <- ymd_hms(rows.dup.names) - days(1) + hours(23) + minutes(59) + seconds(59)
+rows.dup.names.new <- format(rows.dup.names.new, "%Y-%m-%d %H:%M:%S")
+rownames(rows.dup) <- rows.dup.names.new
+
+df <- rbind(input_df, rows.dup)
+df <- df[order(rownames(df)),]
+
+cols.to.shift <- c("day", "daytype", "weekday")
+rows.to.shift <- grep("59$", rownames(df))[-1]
+
+df[rows.to.shift, "hour"] <- 24
+
+for (col in cols.to.shift) {
+  for (row in rows.to.shift) {
+    df[row, col] <- df[row-1, col]
+  }
+}
+df <- df[-1,]
 
 # Pivot wider
 df_fda <- df[,c(load_cols, "day", "daytype", "hour")]
@@ -25,13 +48,14 @@ df_fda <- df_fda[,colSums(is.na(df_fda)) == 0]
 df_fda <- as.data.frame(df_fda)
 rownames(df_fda) <- as.numeric(df_fda$hour)
 df_fda$hour <- NULL
-write.csv(t(df_fda), file = 'data/daily_curves.csv', row.names = TRUE)
+write.csv(t(df_fda), file = 'data/daily_curves_fixed.csv', row.names = TRUE)
 
 # Smoothing ----------------------------------------------------
-T <- 23
+T <- 24
 t <- 0:T
 #df_fda_scaled <- scale(df_fda)
 df_fda_scaled <- apply(df_fda, 2, function(col) col / sum(col)) # L1 normalization
+l1_norm <- colSums(df_fda)
 
 # Plot using matplot
 #matplot(rownames(df_fda_scaled), df_fda_scaled[,], type = "l", col = 1:ncol(df_fda_scaled),
@@ -114,7 +138,8 @@ s.values <- exp(eval.fd(eval.grid, df.Wfd))
 colnames(s.values) <- colnames(df_fda)
 rownames(s.values) <- eval.grid
 # Export the smoothed curves
-write.csv(t(s.values), file = 'data/daily_curves_pos_smoothed_13b_15min.csv', row.names = TRUE)
+smoothed.curves <- t(s.values) * l1_norm
+write.csv(smoothed.curves, file = 'data/daily_curves_pos_smoothed_13b_15min.csv', row.names = TRUE)
 
 plot.full.smoothed.curve <- function(df_fda, s.values) {
   unit <- sample(colnames(df_fda), size = 1)
@@ -279,4 +304,4 @@ export_projected <- function(nb.pc) {
   write.csv(res, file = sprintf('data/daily_curves_reconstructed_%dPCs.csv', nb.pc), row.names = TRUE)
 }
 
-export_projected(nb.pc = 4)
+export_projected(nb.pc = 3)
