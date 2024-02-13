@@ -53,9 +53,24 @@ write.csv(t(df_fda), file = 'data/daily_curves_fixed.csv', row.names = TRUE)
 # Smoothing ----------------------------------------------------
 T <- 24
 t <- 0:T
+
+
+## Scaling -------------------------------------------------------------------------------------
+# We have to be careful in the scaling because we want a functional l1 norm and not a vector
+# l1 norm
+# Function below compute the l1 norm considering the trapezoidal rule
+functional.norm <- function(y, h) {
+  n <- length(y) - 1
+  res <- 0
+  for (i in 1:n) {
+    res <- res + y[i] + y[i+1]
+  }
+  return(res * h / 2)
+}
+
 #df_fda_scaled <- scale(df_fda)
-df_fda_scaled <- apply(df_fda, 2, function(col) col / sum(col)) # L1 normalization
-l1_norm <- colSums(df_fda)
+df_fda_scaled <- apply(df_fda, 2, function(col) col / functional.norm(col, 1)) # L1 normalization
+l1_norm <- apply(df_fda, 2, function(col) functional.norm(col, 1))
 
 # Plot using matplot
 #matplot(rownames(df_fda_scaled), df_fda_scaled[,], type = "l", col = 1:ncol(df_fda_scaled),
@@ -137,8 +152,9 @@ df.Wfd <- df.smooth$Wfdobj
 s.values <- exp(eval.fd(eval.grid, df.Wfd))
 colnames(s.values) <- colnames(df_fda)
 rownames(s.values) <- eval.grid
+
 # Export the smoothed curves
-smoothed.curves <- t(s.values) * l1_norm
+smoothed.curves <- t(sweep(s.values, 2, l1_norm, "*"))
 write.csv(smoothed.curves, file = 'data/daily_curves_pos_smoothed_13b_15min.csv', row.names = TRUE)
 
 plot.full.smoothed.curve <- function(df_fda, s.values) {
@@ -211,6 +227,7 @@ plot(fpca, nx=1000, pointplot=TRUE, harm=c(1,2,3,4), expand=0, cycle=FALSE)
 plot(fpca$harmonics[1,],col=1,ylab='FPC1')
 abline(h=0,lty=2)
 plot(fpca$harmonics[2,],col=2,ylab='FPC2')
+par(mfrow=c(1,1))
 
 # It seems that the data is not so badly approximated in a 3 or 4 dimensional space (85% or 90% of the variance
 # for the system with 13 basis functions)
@@ -258,7 +275,7 @@ legend("topright", legend = levels(df.scores$region), col = 1:7, pch = 16, title
 ## Approximation of the data in the projected space -------------------------------------------
 pcbasis <- fpca$harmonics[1:4,]
 
-x.smooth <- seq(0, 24, 0.1)
+x.smooth <- seq(0, 24, 0.25)
 
 s.values <- exp(eval.fd(x.smooth, df.Wfd))
 colnames(s.values) <- colnames(df_fda)
@@ -304,4 +321,4 @@ export_projected <- function(nb.pc) {
   write.csv(res, file = sprintf('data/daily_curves_reconstructed_%dPCs.csv', nb.pc), row.names = TRUE)
 }
 
-export_projected(nb.pc = 3)
+export_projected(nb.pc = 4)

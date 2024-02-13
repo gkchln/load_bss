@@ -12,6 +12,32 @@ max_iter = 10000
 solver = 'mu'
 verbose = 0
 
+def functional_norm(y, h):
+    n = len(y) - 1
+    res = 0
+    for i in range(n):
+        res += y[i] + y[i+1]
+    return res * h / 2
+
+def normalize_curves(a):
+    """a is a 2-dimensional array where each row corresponds a curve"""
+    h = 24 / a.shape[1]-1
+    norm_a = a.apply(lambda row: functional_norm(row, h), raw=True)
+    return a.div(norm_a, axis=0)
+
+def normalize_curves(data):
+    """Normalize curves in a dataframe or 2-dimensional array."""
+    if isinstance(data, pd.DataFrame):
+        h = 24 / (data.shape[1]-1)
+        norm_data = data.apply(lambda row: functional_norm(row, h), axis=1, raw=True)
+        return data.div(norm_data, axis=0)
+    elif isinstance(data, np.ndarray):
+        h = 24 / (data.shape[1]-1)
+        norm_data = np.apply_along_axis(lambda row: functional_norm(row, h), axis=1, arr=data)
+        return data / norm_data[:, np.newaxis]
+    else:
+        raise ValueError("Input must be either a DataFrame or a 2-dimensional numpy array.")
+
 def initialize_W(X, n_components):
     W = pd.DataFrame(np.random.rand(len(X), n_components), index=X.index, columns=[f"Component {k+1}" for k in range(n_components)])
     W = W.div(W.sum(axis=1), axis=0)
@@ -23,8 +49,7 @@ def main(n_components, n_runs, infile, outfile):
     unit_info = input_df.index.str.extract(r'^(?P<region>[\w.]+)_(?P<year>\d{4})-(?P<month>\d{2})-\d{2}_(?P<daytype>[\w ]+)$').set_index(input_df.index)
     df = pd.concat([input_df, unit_info], axis=1)
     X = df.drop(unit_info.columns, axis=1)
-    # We want to keep a functional l1 norm of 1. In case of 15min interval load measures (so 97 measures), we normalise by the l1 norm of the vector divided by int(97 / 24) = 4
-    X = X.div(X.sum(axis=1), axis=0) * int(X.shape[1] / 24)
+    X = normalize_curves(X)
 
     # Specify NMF model
     model = NMF(
@@ -48,7 +73,7 @@ def main(n_components, n_runs, infile, outfile):
     for i in trange(n_runs):
         # Initialize W matrix with rows uniformely sampled on the simplex(n_components)
         W_init = initialize_W(X, n_components)
-        H_init = (np.ones((n_components, p)) / p) * int(X.shape[1] / 24)
+        H_init = normalize_curves(np.ones((n_components, p)))
 
         # Run the solving algorithm
         W = model.fit_transform(
