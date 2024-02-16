@@ -19,12 +19,6 @@ def functional_norm(y, h):
         res += y[i] + y[i+1]
     return res * h / 2
 
-def normalize_curves(a):
-    """a is a 2-dimensional array where each row corresponds a curve"""
-    h = 24 / a.shape[1]-1
-    norm_a = a.apply(lambda row: functional_norm(row, h), raw=True)
-    return a.div(norm_a, axis=0)
-
 def normalize_curves(data):
     """Normalize curves in a dataframe or 2-dimensional array."""
     if isinstance(data, pd.DataFrame):
