@@ -7,7 +7,7 @@ library(lubridate)
 
 # Read and process data -----------------------------------------------------------------------
 
-input_df <- read.csv2('data/load_with_calendar.csv', sep = ",", header = TRUE, row.names = "Date")
+input_df <- read.csv2('data/source_load/load_with_calendar.csv', sep = ",", header = TRUE, row.names = "Date")
 
 load_cols = c("Calabria", "Centre.North", "Centre.South", "North", "Sardinia", "Sicily",
               "South")
@@ -83,6 +83,7 @@ l1_norm <- apply(df_fda, 2, function(col) functional.norm(col, 1))
 #m <- 5           # spline order 
 #degree <- m-1    # spline degree 
 nbasis <- c(7, 9, 13, 17)
+nbasis <- c(13)
 
 df.fd.list <- list()
 for (p in nbasis) {
@@ -182,6 +183,19 @@ plot.full.smoothed.curve(df_fda, s.values)
 ## Cumulative proportion of variance ----------------------------------------------------------
 fpca <- pca.fd(df.Wfd, nharm=nbasis, centerfns=TRUE)
 cumsum(fpca$varprop)
+
+# Plotting the scree plot
+plot(cumsum(fpca$varprop), type = "b", xlab = "Component", ylab = "Cumulative Proportion of Variance", 
+     main = "Scree Plot", ylim = c(0, 1), pch = 19)
+abline(v = 3, col = "red", lty = 2) # Adding a vertical dashed line at 3 components
+grid() # Adding gridlines
+
+# Plotting the scree plot
+plot(cumsum(fpca$varprop), type = "b", xlab = "Number of Components", ylab = "Cumulative Proportion of Variance",
+     ylim = c(0, 1), pch = 19, xaxt = "n", main=NULL)
+axis(1, at = 1:length(fpca$varprop), labels = 1:length(fpca$varprop)) # Adding xticks
+abline(v = 3, col = "red", lty = 2) # Adding a vertical dashed line at 3 components
+grid() # Adding gridlines
 
 plt <- plot_ly(
   x = 1:nbasis,
