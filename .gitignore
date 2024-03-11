@@ -158,3 +158,4 @@ cython_debug/
 .Rhistory
 .Rproj.user
 *.Rproj
+.DS_Store
