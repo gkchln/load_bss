@@ -9,6 +9,31 @@ library(lubridate)
 
 input_df <- read.csv2('data/source_load/load_with_calendar.csv', sep = ",", header = TRUE, row.names = "Date")
 
+# HOTFIX: Add row for 00:00 of the day following the last day in the df
+input_df_2023 <- read.csv2("data/source_load/refresh_202402/load_2023_with_calendar.csv", sep = ",",
+                           header = TRUE, row.names = "Date")
+input_df <- rbind(input_df, input_df_2023[1,])
+
+# HOTFIX: Add value for Calabria 2021-01-01 00:00
+input_df['2021-01-01 00:00:00', 'Calabria'] <- 620
+
+# HOTFIX: handle na values for hour loss days 
+hour_loss_days = c(
+  "2018-03-25",
+  "2019-03-31",
+  "2020-03-29",
+  "2021-03-28",
+  "2022-03-27"
+)
+rows.dup <- input_df[which((input_df$hour == 3) & input_df$day %in% hour_loss_days),]
+rows.dup.names <- rownames(rows.dup)
+rows.dup.names.new <- ymd_hms(rows.dup.names) - hours(1)
+rows.dup.names.new <- format(rows.dup.names.new, "%Y-%m-%d %H:%M:%S")
+rownames(rows.dup) <- rows.dup.names.new
+input_df <- rbind(input_df, rows.dup)
+input_df <- input_df[order(rownames(input_df)),]
+input_df[rownames(rows.dup), "hour"] <- 2
+
 load_cols = c("Calabria", "Centre.North", "Centre.South", "North", "Sardinia", "Sicily",
               "South")
 
@@ -28,7 +53,7 @@ rownames(rows.dup) <- rows.dup.names.new
 df <- rbind(input_df, rows.dup)
 df <- df[order(rownames(df)),]
 
-cols.to.shift <- c("day", "daytype", "weekday")
+cols.to.shift <- c("year", "day", "weekday", "weekofyear", "monthofyear", "daytype")
 rows.to.shift <- grep("59$", rownames(df))[-1]
 
 df[rows.to.shift, "hour"] <- 24
@@ -38,12 +63,16 @@ for (col in cols.to.shift) {
     df[row, col] <- df[row-1, col]
   }
 }
-df <- df[-1,]
+n <- dim(df)[1]
+df <- df[2:(n-1),] # Remove first and last line corresponding to previous or posterior years
 
 # Pivot wider
 df_fda <- df[,c(load_cols, "day", "daytype", "hour")]
 df_fda <- pivot_wider(df_fda, id_cols = "hour", names_from = c(day, daytype), values_from = load_cols)
-#df_fda <- df_fda[,colSums(!is.na(df_fda)) > 0]
+
+# HOTFIX: Check that there are no NA except from Calabria data before 2021
+df_fda[, colSums(is.na(df_fda)) > 0 & !grepl("Calabria_2018|Calabria_2019|Calabria_2020", colnames(df_fda))]
+
 df_fda <- df_fda[,colSums(is.na(df_fda)) == 0]
 df_fda <- as.data.frame(df_fda)
 rownames(df_fda) <- as.numeric(df_fda$hour)
