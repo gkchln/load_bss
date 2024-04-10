@@ -2,6 +2,33 @@ import numpy as np
 from sklearn.metrics import pairwise_distances_argmin
 from scipy.spatial.distance import cdist, euclidean
 
+### Calendar utils ###
+weekday_mapping = {
+    0: "Monday",
+    1: "Tuesday",
+    2: "Wednesday",
+    3: "Thursday",
+    4: "Friday",
+    5: "Saturday",
+    6: "Sunday"
+}
+
+month_mapping = {
+    1: 'January',
+    2: 'February',
+    3: 'March',
+    4: 'April',
+    5: 'May',
+    6: 'June',
+    7: 'July',
+    8: 'August',
+    9: 'September',
+    10: 'October',
+    11: 'November',
+    12: 'December'
+}
+
+### Functions ###
 def geometric_median(X, eps=1e-5):
     """
     Compute the geometric median of a set of points using an iterative algorithm.
