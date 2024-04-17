@@ -7,7 +7,8 @@ library(lubridate)
 
 # Read and process data -----------------------------------------------------------------------
 
-input_df <- read.csv2('data/1_input/load/load_with_calendar.csv', sep = ",", header = TRUE, row.names = "Date")
+input_df <- read.csv2('data/1_input/load/load_with_calendar.csv', sep = ",", header = TRUE,
+                      row.names = "Date")
 
 # HOTFIX: Add row for 00:00 of the day following the last day in the df
 input_df_2023 <- read.csv2("data/1_input/load/refresh_202402/load_2023_with_calendar.csv", sep = ",",
@@ -265,6 +266,33 @@ plot(fpca$harmonics[1,],col=1,ylab='FPC1')
 abline(h=0,lty=2)
 plot(fpca$harmonics[2,],col=2,ylab='FPC2')
 par(mfrow=c(1,1))
+
+# Retrieve and export the "profiles" associated with the different PCs
+h = 1
+x <- seq(0, 24, h)
+W.mean <- eval.fd(x, fpca$meanfd)
+
+profiles <- matrix(nrow = 0, ncol = length(x))
+rowlabels <- c()
+for (k in 1:4) {
+  profile.pos <- exp(W.mean + eval.fd(x, fpca$harmonics[k,] * 5 * sqrt(fpca$values[k])))
+  print(functional.norm(profile.pos, h)) # They have norm close to 1
+  profile.neg <- exp(W.mean - eval.fd(x, fpca$harmonics[k,] * 5 * sqrt(fpca$values[k])))
+  print(functional.norm(profile.neg, h)) # They have norm close to 1
+  # Plot the profiles
+  plot(exp(W.mean), x=x, type='l', lwd=2, ylab='Normalised Load', ylim=c(0, 0.06), main='FPC1')
+  lines(profile.pos, x=x, col=2)
+  lines(profile.neg, x=x, col=3)
+  # Add them to the export
+  profiles <- rbind(profiles, as.vector(profile.pos))
+  profiles <- rbind(profiles, as.vector(profile.neg))
+  rowlabels <- c(rowlabels, c(sprintf('prof_%d_pos', k), sprintf('prof_%d_neg', k)))
+  Sys.sleep(1)
+}
+rownames(profiles) <- rowlabels
+colnames(profiles) <- x
+
+write.csv(profiles, file = sprintf('data/2_processed/FPCA_profiles_%dmin.csv', h * 60), row.names = TRUE)
 
 # It seems that the data is not so badly approximated in a 3 or 4 dimensional space (85% or 90% of the variance
 # for the system with 13 basis functions)
