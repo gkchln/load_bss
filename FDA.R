@@ -7,10 +7,10 @@ library(lubridate)
 
 # Read and process data -----------------------------------------------------------------------
 
-input_df <- read.csv2('data/source_load/load_with_calendar.csv', sep = ",", header = TRUE, row.names = "Date")
+input_df <- read.csv2('data/1_input/load/load_with_calendar.csv', sep = ",", header = TRUE, row.names = "Date")
 
 # HOTFIX: Add row for 00:00 of the day following the last day in the df
-input_df_2023 <- read.csv2("data/source_load/refresh_202402/load_2023_with_calendar.csv", sep = ",",
+input_df_2023 <- read.csv2("data/1_input/load/refresh_202402/load_2023_with_calendar.csv", sep = ",",
                            header = TRUE, row.names = "Date")
 input_df <- rbind(input_df, input_df_2023[1,])
 
@@ -185,7 +185,7 @@ rownames(s.values) <- eval.grid
 
 # Export the smoothed curves
 smoothed.curves <- t(sweep(s.values, 2, l1_norm, "*"))
-write.csv(smoothed.curves, file = 'data/daily_curves_pos_smoothed_13b_15min.csv', row.names = TRUE)
+write.csv(smoothed.curves, file = 'data/2_processed/daily_curves_smoothed_15min.csv', row.names = TRUE)
 
 plot.full.smoothed.curve <- function(df_fda, s.values) {
   unit <- sample(colnames(df_fda), size = 1)
@@ -212,12 +212,6 @@ plot.full.smoothed.curve(df_fda, s.values)
 ## Cumulative proportion of variance ----------------------------------------------------------
 fpca <- pca.fd(df.Wfd, nharm=nbasis, centerfns=TRUE)
 cumsum(fpca$varprop)
-
-# Plotting the scree plot
-plot(cumsum(fpca$varprop), type = "b", xlab = "Component", ylab = "Cumulative Proportion of Variance", 
-     main = "Scree Plot", ylim = c(0, 1), pch = 19)
-abline(v = 3, col = "red", lty = 2) # Adding a vertical dashed line at 3 components
-grid() # Adding gridlines
 
 # Plotting the scree plot
 plot(cumsum(fpca$varprop), type = "b", xlab = "Number of Components", ylab = "Cumulative Proportion of Variance",
@@ -361,7 +355,7 @@ export_projected <- function(nb.pc) {
   }
   rownames(res) <- colnames(df_fda)
   colnames(res) <- t
-  write.csv(res, file = sprintf('data/daily_curves_reconstructed_%dPCs.csv', nb.pc), row.names = TRUE)
+  write.csv(res, file = sprintf('data/2_processed/daily_curves_reconstructed_%dPCs.csv', nb.pc), row.names = TRUE)
 }
 
-export_projected(nb.pc = 4)
+export_projected(nb.pc = 3)
