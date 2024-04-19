@@ -29,6 +29,10 @@ month_mapping = {
 }
 
 ### Functions ###
+def get_string_color(color, opacity=1):
+    r, g, b = tuple(int(value * 255) for value in color)
+    return f'rgba({r}, {g}, {b}, {opacity})'
+
 def geometric_median(X, eps=1e-5):
     """
     Compute the geometric median of a set of points using an iterative algorithm.
