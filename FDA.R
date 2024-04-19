@@ -10,7 +10,8 @@ library(lubridate)
 input_df <- read.csv2('data/1_input/load/load_with_calendar.csv', sep = ",", header = TRUE,
                       row.names = "Date")
 
-# HOTFIX: Add row for 00:00 of the day following the last day in the df
+# HOTFIX: Add row for 00:00 of the day following the last day in the df (not executed for regional
+# data)
 input_df_2023 <- read.csv2("data/1_input/load/refresh_202402/load_2023_with_calendar.csv", sep = ",",
                            header = TRUE, row.names = "Date")
 input_df <- rbind(input_df, input_df_2023[1,])
@@ -24,7 +25,8 @@ hour_loss_days = c(
   "2019-03-31",
   "2020-03-29",
   "2021-03-28",
-  "2022-03-27"
+  "2022-03-27",
+  "2023-03-26"
 )
 rows.dup <- input_df[which((input_df$hour == 3) & input_df$day %in% hour_loss_days),]
 rows.dup.names <- rownames(rows.dup)
@@ -37,12 +39,12 @@ input_df[rownames(rows.dup), "hour"] <- 2
 
 load_cols = c("Calabria", "Centre.North", "Centre.South", "North", "Sardinia", "Sicily",
               "South")
+#load_cols <- colnames((input_df))[1:20]
 
 input_df[,load_cols] <- lapply(input_df[,load_cols], as.numeric)
 head(input_df)
 
 T <- nrow(input_df)
-plot(1:T, input_df$Italy, type = "l")
 
 # Operation to duplicate the load at midnight to add it as point of previous day and next day
 rows.dup <- input_df[which(input_df$hour == 0),]
@@ -78,7 +80,7 @@ df_fda <- df_fda[,colSums(is.na(df_fda)) == 0]
 df_fda <- as.data.frame(df_fda)
 rownames(df_fda) <- as.numeric(df_fda$hour)
 df_fda$hour <- NULL
-write.csv(t(df_fda), file = 'data/daily_curves_fixed.csv', row.names = TRUE)
+write.csv(t(df_fda), file = 'data/2_processed/regional/daily_curves_fixed.csv', row.names = TRUE)
 
 # Smoothing ----------------------------------------------------
 T <- 24
@@ -125,6 +127,10 @@ for (p in nbasis) {
   df.fd.list[[as.character(p)]] <- df.smooth
 }
 #plot.fd(df.fd)
+
+# Saving the fd list
+save(df.fd.list, file = "data/2_processed/RData/df_fd_list.RData")
+load("data/2_processed/RData/df_fd_list.RData")
 
 colors <- c("red", "green", "purple", "cyan")
 
@@ -186,7 +192,7 @@ rownames(s.values) <- eval.grid
 
 # Export the smoothed curves
 smoothed.curves <- t(sweep(s.values, 2, l1_norm, "*"))
-write.csv(smoothed.curves, file = 'data/2_processed/daily_curves_smoothed_15min.csv', row.names = TRUE)
+write.csv(smoothed.curves, file = 'data/2_processed/regional/daily_curves_smoothed_15min.csv', row.names = TRUE)
 
 plot.full.smoothed.curve <- function(df_fda, s.values) {
   unit <- sample(colnames(df_fda), size = 1)
@@ -268,19 +274,21 @@ plot(fpca$harmonics[2,],col=2,ylab='FPC2')
 par(mfrow=c(1,1))
 
 # Retrieve and export the "profiles" associated with the different PCs
-h = 1
+h = 0.25
 x <- seq(0, 24, h)
 W.mean <- eval.fd(x, fpca$meanfd)
 
 profiles <- matrix(nrow = 0, ncol = length(x))
 rowlabels <- c()
+par(mfrow=c(2, 2))
 for (k in 1:4) {
   profile.pos <- exp(W.mean + eval.fd(x, fpca$harmonics[k,] * 5 * sqrt(fpca$values[k])))
   print(functional.norm(profile.pos, h)) # They have norm close to 1
   profile.neg <- exp(W.mean - eval.fd(x, fpca$harmonics[k,] * 5 * sqrt(fpca$values[k])))
   print(functional.norm(profile.neg, h)) # They have norm close to 1
   # Plot the profiles
-  plot(exp(W.mean), x=x, type='l', lwd=2, ylab='Normalised Load', ylim=c(0, 0.06), main='FPC1')
+  plot(exp(W.mean), x=x, type='l', lwd=2, ylab='Normalised Load', ylim=c(0, 0.06), xlab='Hour',
+       main=sprintf('FPC %d', k))
   lines(profile.pos, x=x, col=2)
   lines(profile.neg, x=x, col=3)
   # Add them to the export
@@ -292,7 +300,7 @@ for (k in 1:4) {
 rownames(profiles) <- rowlabels
 colnames(profiles) <- x
 
-write.csv(profiles, file = sprintf('data/2_processed/FPCA_profiles_%dmin.csv', h * 60), row.names = TRUE)
+write.csv(profiles, file = sprintf('data/2_processed/regional/FPCA_profiles_%dmin.csv', h * 60), row.names = TRUE)
 
 # It seems that the data is not so badly approximated in a 3 or 4 dimensional space (85% or 90% of the variance
 # for the system with 13 basis functions)
