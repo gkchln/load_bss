@@ -6,15 +6,14 @@ library(progress)
 library(lubridate)
 
 # Read and process data -----------------------------------------------------------------------
-
-input_df <- read.csv2('data/1_input/load/load_with_calendar.csv', sep = ",", header = TRUE,
+input_df <- read.csv2('data/2_processed/load_with_calendar.csv', sep = ",", header = TRUE,
                       row.names = "Date")
 
 # HOTFIX: Add row for 00:00 of the day following the last day in the df (not executed for regional
 # data)
-input_df_2023 <- read.csv2("data/1_input/load/refresh_202402/load_2023_with_calendar.csv", sep = ",",
+input_df_2024 <- read.csv2("data/2_processed/load_2024_with_calendar.csv", sep = ",",
                            header = TRUE, row.names = "Date")
-input_df <- rbind(input_df, input_df_2023[1,])
+input_df <- rbind(input_df, input_df_2024[1,])
 
 # HOTFIX: Add value for Calabria 2021-01-01 00:00
 input_df['2021-01-01 00:00:00', 'Calabria'] <- 620
@@ -38,7 +37,7 @@ input_df <- input_df[order(rownames(input_df)),]
 input_df[rownames(rows.dup), "hour"] <- 2
 
 load_cols = c("Calabria", "Centre.North", "Centre.South", "North", "Sardinia", "Sicily",
-              "South")
+              "South", "Italy")
 #load_cols <- colnames((input_df))[1:20]
 
 input_df[,load_cols] <- lapply(input_df[,load_cols], as.numeric)
@@ -56,7 +55,7 @@ rownames(rows.dup) <- rows.dup.names.new
 df <- rbind(input_df, rows.dup)
 df <- df[order(rownames(df)),]
 
-cols.to.shift <- c("year", "day", "weekday", "weekofyear", "monthofyear", "daytype")
+cols.to.shift <- c("year", "day", "weekday", "weekofyear", "monthofyear", "season", "daytype")
 rows.to.shift <- grep("59$", rownames(df))[-1]
 
 df[rows.to.shift, "hour"] <- 24
@@ -70,8 +69,13 @@ n <- dim(df)[1]
 df <- df[2:(n-1),] # Remove first and last line corresponding to previous or posterior years
 
 # Pivot wider
-df_fda <- df[,c(load_cols, "day", "daytype", "hour")]
-df_fda <- pivot_wider(df_fda, id_cols = "hour", names_from = c(day, daytype), values_from = load_cols)
+#zones <- load_cols
+zones <- c("Italy")
+# HOTFIX: select only a specific season
+seasons <- c("Spring", "Fall")
+#df_fda <- df[,c(zones, "day", "daytype", "hour")]
+df_fda <- df[df$season %in% seasons, c(zones, "day", "daytype", "hour")]
+df_fda <- pivot_wider(df_fda, id_cols = "hour", names_from = c(day, daytype), values_from = all_of(zones))
 
 # HOTFIX: Check that there are no NA except from Calabria data before 2021
 df_fda[, colSums(is.na(df_fda)) > 0 & !grepl("Calabria_2018|Calabria_2019|Calabria_2020", colnames(df_fda))]
@@ -80,7 +84,7 @@ df_fda <- df_fda[,colSums(is.na(df_fda)) == 0]
 df_fda <- as.data.frame(df_fda)
 rownames(df_fda) <- as.numeric(df_fda$hour)
 df_fda$hour <- NULL
-write.csv(t(df_fda), file = 'data/2_processed/regional/daily_curves_fixed.csv', row.names = TRUE)
+write.csv(t(df_fda), file = 'data/2_processed/daily_curves_Italy_Spring-Fall.csv', row.names = TRUE)
 
 # Smoothing ----------------------------------------------------
 T <- 24
@@ -114,8 +118,8 @@ l1_norm <- apply(df_fda, 2, function(col) functional.norm(col, 1))
 # Set parameters
 #m <- 5           # spline order 
 #degree <- m-1    # spline degree 
-nbasis <- c(7, 9, 13, 17)
-nbasis <- c(13)
+nbasis <- c(7, 9, 13, 17, 23)
+#nbasis <- c(13)
 
 df.fd.list <- list()
 for (p in nbasis) {
@@ -129,8 +133,8 @@ for (p in nbasis) {
 #plot.fd(df.fd)
 
 # Saving the fd list
-save(df.fd.list, file = "data/2_processed/RData/df_fd_list.RData")
-load("data/2_processed/RData/df_fd_list.RData")
+#save(df.fd.list, file = "data/2_processed/RData/df_fd_list.RData")
+#load("data/2_processed/RData/df_fd_list.RData")
 
 colors <- c("red", "green", "purple", "cyan")
 
@@ -167,12 +171,12 @@ show.random.smoothed.curve <- function(df_fda_scaled, nbasis, df.fd.list, unit='
   }
   
   
-  
   # Add a title to the plot
   plt <- plt %>% layout(
     title = unit,
     margin = list(t = 50),  # Set the top margin (adjust the value as needed),
-    showlegend = FALSE  # You can customize other layout options as well
+    showlegend = FALSE,  # You can customize other layout options as well,
+    yaxis = list(range = c(0, 0.06))
   )
   
   print(plt)
@@ -192,7 +196,7 @@ rownames(s.values) <- eval.grid
 
 # Export the smoothed curves
 smoothed.curves <- t(sweep(s.values, 2, l1_norm, "*"))
-write.csv(smoothed.curves, file = 'data/2_processed/regional/daily_curves_smoothed_15min.csv', row.names = TRUE)
+#write.csv(smoothed.curves, file = 'data/2_processed/regional/daily_curves_smoothed_15min.csv', row.names = TRUE)
 
 plot.full.smoothed.curve <- function(df_fda, s.values) {
   unit <- sample(colnames(df_fda), size = 1)
@@ -221,10 +225,11 @@ fpca <- pca.fd(df.Wfd, nharm=nbasis, centerfns=TRUE)
 cumsum(fpca$varprop)
 
 # Plotting the scree plot
+par(mfrow=c(1,1))
 plot(cumsum(fpca$varprop), type = "b", xlab = "Number of Components", ylab = "Cumulative Proportion of Variance",
      ylim = c(0, 1), pch = 19, xaxt = "n", main=NULL)
 axis(1, at = 1:length(fpca$varprop), labels = 1:length(fpca$varprop)) # Adding xticks
-abline(v = 3, col = "red", lty = 2) # Adding a vertical dashed line at 3 components
+abline(v = 4, col = "red", lty = 2) # Adding a vertical dashed line at elbow
 grid() # Adding gridlines
 
 plt <- plot_ly(
@@ -287,15 +292,15 @@ for (k in 1:4) {
   profile.neg <- exp(W.mean - eval.fd(x, fpca$harmonics[k,] * 5 * sqrt(fpca$values[k])))
   print(functional.norm(profile.neg, h)) # They have norm close to 1
   # Plot the profiles
-  plot(exp(W.mean), x=x, type='l', lwd=2, ylab='Normalised Load', ylim=c(0, 0.06), xlab='Hour',
-       main=sprintf('FPC %d', k))
+  plot(exp(W.mean), x=x, type='l', lwd=2, ylab='Normalised Load', ylim=c(0, 0.07), xlab='Hour',
+       main=sprintf('FPC %d (%.1f%%)', k, 100*fpca$varprop[k]))
   lines(profile.pos, x=x, col=2)
   lines(profile.neg, x=x, col=3)
   # Add them to the export
   profiles <- rbind(profiles, as.vector(profile.pos))
   profiles <- rbind(profiles, as.vector(profile.neg))
   rowlabels <- c(rowlabels, c(sprintf('prof_%d_pos', k), sprintf('prof_%d_neg', k)))
-  Sys.sleep(1)
+  #Sys.sleep(1)
 }
 rownames(profiles) <- rowlabels
 colnames(profiles) <- x
@@ -311,13 +316,15 @@ df.scores <- fpca$scores
 rownames(df.scores) <- colnames(df_fda)
 df.scores <- as.data.frame(df.scores)
 df.scores[,"month"] <- sapply(rownames(df.scores), function(x) str_extract(x, ".*-(.*)-.*", group=1), USE.NAMES = FALSE)
-df.scores[,"region"] <- sapply(rownames(df.scores), function(x) str_extract(x, "(.*)_.*_.*", group=1), USE.NAMES = FALSE)
-df.scores[,"daytype"] <- sapply(rownames(df.scores), function(x) str_extract(x, ".*_.*_(.*)", group=1), USE.NAMES = FALSE)
+df.scores[,"region"] <- sapply(rownames(df.scores), function(x) str_extract(x, "^(.*)_.*_.*", group=1), USE.NAMES = FALSE)
+df.scores[,"daytype"] <- sapply(rownames(df.scores), function(x) str_extract(x, ".*_.*_(.*)$", group=1), USE.NAMES = FALSE)
 
-month <- '02'
-daytype <- "Working day"
-region <- "North"
-df.plot <- df.scores[which((df.scores$region == region)),]
+
+#month <- '02'
+#daytype <- "Working day"
+region <- paste(zones, collapse = '_')
+df.plot <- df.scores
+#df.plot <- df.scores[which((df.scores$region == region)),]
 #df.plot <- df.scores[which((df.scores$region == region)&(df.scores$daytype == daytype)),]
 #df.plot <- df.scores[which((df.scores$month == month)&(df.scores$daytype == daytype)),]
 #df.plot <- data.frame(df.scores)
@@ -333,16 +340,15 @@ plot_ly(
   color=df.plot[,"daytype"],
   text = rownames(df.plot)
 ) %>% layout(
-  title = sprintf("Scores for region %s", region),
+  #title = sprintf("Scores for region %s", region),
   margin = list(t = 50),
   xaxis = list(title = sprintf("PC %s", pcs[1])),  # Add x-axis label
   yaxis = list(title = sprintf("PC %s", pcs[2])), # Add y-axis label
   showlegend = TRUE
 )
 
-
-pairs(df.plot[, 1:4], pch = 16, col = as.integer(as.factor(df.plot$daytype)), main = "Scatterplot Matrix")
-legend("topright", legend = levels(df.scores$region), col = 1:7, pch = 16, title = "Regions")
+#pairs(df.plot[, 1:4], pch = 16, col = as.integer(as.factor(df.plot$daytype)), main = "Scatterplot Matrix")
+#legend("topright", legend = levels(df.scores$region), col = 1:7, pch = 16, title = "Regions")
 
 
 ## Approximation of the data in the projected space -------------------------------------------
@@ -363,6 +369,7 @@ project.unit <- function(unit, x=x.smooth, nb.pc=4) {
 }
 
 unit <- sample(colnames(df_fda), size = 1)
+par(mfrow=c(1,1))
 plot(x=t, y=df_fda_scaled[,unit], lty=1, col='blue', lwd=2, main=unit, xlim = c(0,24))
 lines(x=x.smooth, s.values[,unit], lty=1, col='blue', lwd=2)
 lines(x=x.smooth, project.unit(unit, nb.pc = 1), col='red', main=unit, lwd=2)
