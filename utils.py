@@ -28,6 +28,21 @@ month_mapping = {
     12: 'December'
 }
 
+month_to_season = {
+    1: "Winter",
+    2: "Winter",
+    3: "Spring",
+    4: "Spring",
+    5: "Spring",
+    6: "Summer",
+    7: "Summer",
+    8: "Summer",
+    9: "Fall",
+    10: "Fall",
+    11: "Fall",
+    12: "Winter"
+}
+
 ### Functions ###
 def get_string_color(color, opacity=1):
     r, g, b = tuple(int(value * 255) for value in color)
