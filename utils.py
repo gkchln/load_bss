@@ -1,6 +1,8 @@
 import numpy as np
 from sklearn.metrics import pairwise_distances_argmin
 from scipy.spatial.distance import cdist, euclidean
+import warnings
+import matplotlib.pyplot as plt
 
 ### Calendar utils ###
 weekday_mapping = {
@@ -120,3 +122,65 @@ def geometric_medoid(X, *kwargs):
     geomedian = geometric_median(X)
     argmin = pairwise_distances_argmin(np.array([geomedian]), X)[0]
     return X[argmin,:]
+
+def squared_norm(x):
+    """Squared Euclidean or Frobenius norm of x.
+
+    Faster than norm(x) ** 2.
+
+    Parameters
+    ----------
+    x : array-like
+        The input array which could be either be a vector or a 2 dimensional array.
+
+    Returns
+    -------
+    float
+        The Euclidean norm when x is a vector, the Frobenius norm when x
+        is a matrix (2-d array).
+    """
+    x = np.ravel(x, order="K")
+    if np.issubdtype(x.dtype, np.integer):
+        warnings.warn(
+            (
+                "Array type is integer, np.dot may overflow. "
+                "Data should be float type to avoid this issue"
+            ),
+            UserWarning,
+        )
+    return np.dot(x, x)
+
+
+# Exceptions  used in PenNMF
+class NotFittedError(ValueError, AttributeError):
+    pass
+
+class ConvergenceWarning(UserWarning):
+    pass
+
+
+def plot_components(H, ax=None, figsize=(10, 6), labels=None, emphasize_comp=None, **kwargs):
+    if ax is None:
+        fig, ax = plt.subplots(figsize=figsize)
+    else:
+        fig = ax.get_figure()
+
+    n_components = H.shape[0]
+    abscissa = np.linspace(0, 24, H.shape[1])
+    for k in range(n_components):
+        if labels:
+            label = labels[k]
+        else:
+            label = f'Component {k + 1}'
+        if emphasize_comp and emphasize_comp != k + 1:
+            alpha = 0.2
+        else:
+            alpha = 1
+        ax.plot(abscissa, H[k, :], linestyle='-', label=label, alpha=alpha, **kwargs)
+
+    ax.set_xlabel('Hour')
+    ax.set_ylabel('Normalized Load')
+    # ax.set_title(title)
+    ax.legend(loc='upper left')
+    
+    return fig, ax
