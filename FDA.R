@@ -72,7 +72,7 @@ df <- df[2:(n-1),] # Remove first and last line corresponding to previous or pos
 #zones <- load_cols
 zones <- c("Italy")
 # HOTFIX: select only a specific season
-seasons <- c("Spring", "Fall")
+seasons <- c("Winter", "Spring", "Summer", "Fall")
 #df_fda <- df[,c(zones, "day", "daytype", "hour")]
 df_fda <- df[df$season %in% seasons, c(zones, "day", "daytype", "hour")]
 df_fda <- pivot_wider(df_fda, id_cols = "hour", names_from = c(day, daytype), values_from = all_of(zones))
@@ -84,12 +84,14 @@ df_fda <- df_fda[,colSums(is.na(df_fda)) == 0]
 df_fda <- as.data.frame(df_fda)
 rownames(df_fda) <- as.numeric(df_fda$hour)
 df_fda$hour <- NULL
-write.csv(t(df_fda), file = 'data/2_processed/daily_curves_Italy_Spring-Fall.csv', row.names = TRUE)
+file_path <- 'data/2_processed/daily_curves_Italy.csv'
+write.csv(t(df_fda), file = file_path, row.names = TRUE)
+#df_fda <- t(read.csv(file_path, row.names = 1, check.names = FALSE))
+colnames(df_fda) <- paste("Italy_", colnames(df_fda), sep = "")
 
 # Smoothing ----------------------------------------------------
 T <- 24
 t <- 0:T
-
 
 ## Scaling -------------------------------------------------------------------------------------
 # We have to be careful in the scaling because we want a functional l1 norm and not a vector
@@ -118,8 +120,8 @@ l1_norm <- apply(df_fda, 2, function(col) functional.norm(col, 1))
 # Set parameters
 #m <- 5           # spline order 
 #degree <- m-1    # spline degree 
-nbasis <- c(7, 9, 13, 17, 23)
-#nbasis <- c(13)
+#nbasis <- c(7, 9, 13, 17, 23)
+nbasis <- c(13)
 
 df.fd.list <- list()
 for (p in nbasis) {
@@ -196,7 +198,8 @@ rownames(s.values) <- eval.grid
 
 # Export the smoothed curves
 smoothed.curves <- t(sweep(s.values, 2, l1_norm, "*"))
-#write.csv(smoothed.curves, file = 'data/2_processed/regional/daily_curves_smoothed_15min.csv', row.names = TRUE)
+write.csv(smoothed.curves, file = 'data/2_processed/daily_curves_Italy_smoothed_15min.csv',
+          row.names = TRUE)
 
 plot.full.smoothed.curve <- function(df_fda, s.values) {
   unit <- sample(colnames(df_fda), size = 1)
@@ -212,7 +215,8 @@ plot.full.smoothed.curve <- function(df_fda, s.values) {
   plt <- plt %>% layout(
     title = unit,
     margin = list(t = 50),  # Set the top margin (adjust the value as needed),
-    showlegend = FALSE  # You can customize other layout options as well
+    showlegend = FALSE,  # You can customize other layout options as well
+    yaxis = list(range = c(0, 0.06))
   )
   print(plt)
 }
@@ -229,7 +233,7 @@ par(mfrow=c(1,1))
 plot(cumsum(fpca$varprop), type = "b", xlab = "Number of Components", ylab = "Cumulative Proportion of Variance",
      ylim = c(0, 1), pch = 19, xaxt = "n", main=NULL)
 axis(1, at = 1:length(fpca$varprop), labels = 1:length(fpca$varprop)) # Adding xticks
-abline(v = 4, col = "red", lty = 2) # Adding a vertical dashed line at elbow
+abline(v = 2, col = "red", lty = 2) # Adding a vertical dashed line at elbow
 grid() # Adding gridlines
 
 plt <- plot_ly(
@@ -294,8 +298,8 @@ for (k in 1:4) {
   # Plot the profiles
   plot(exp(W.mean), x=x, type='l', lwd=2, ylab='Normalised Load', ylim=c(0, 0.07), xlab='Hour',
        main=sprintf('FPC %d (%.1f%%)', k, 100*fpca$varprop[k]))
-  lines(profile.pos, x=x, col=2)
-  lines(profile.neg, x=x, col=3)
+  lines(profile.pos, x=x, col=3)
+  lines(profile.neg, x=x, col=2)
   # Add them to the export
   profiles <- rbind(profiles, as.vector(profile.pos))
   profiles <- rbind(profiles, as.vector(profile.neg))
@@ -305,7 +309,7 @@ for (k in 1:4) {
 rownames(profiles) <- rowlabels
 colnames(profiles) <- x
 
-write.csv(profiles, file = sprintf('data/2_processed/regional/FPCA_profiles_%dmin.csv', h * 60), row.names = TRUE)
+#write.csv(profiles, file = sprintf('data/2_processed/regional/FPCA_profiles_%dmin.csv', h * 60), row.names = TRUE)
 
 # It seems that the data is not so badly approximated in a 3 or 4 dimensional space (85% or 90% of the variance
 # for the system with 13 basis functions)
@@ -319,6 +323,11 @@ df.scores[,"month"] <- sapply(rownames(df.scores), function(x) str_extract(x, ".
 df.scores[,"region"] <- sapply(rownames(df.scores), function(x) str_extract(x, "^(.*)_.*_.*", group=1), USE.NAMES = FALSE)
 df.scores[,"daytype"] <- sapply(rownames(df.scores), function(x) str_extract(x, ".*_.*_(.*)$", group=1), USE.NAMES = FALSE)
 
+# HOTFIX: add the season to df.scores
+month_to_season <- c("Winter", "Winter", "Winter", "Spring", "Spring", "Spring",
+                     "Summer", "Summer", "Summer", "Fall", "Fall", "Fall")
+df.scores[,"season"] <- month_to_season[as.numeric(df.scores$month)]
+
 
 #month <- '02'
 #daytype <- "Working day"
@@ -329,7 +338,7 @@ df.plot <- df.scores
 #df.plot <- df.scores[which((df.scores$month == month)&(df.scores$daytype == daytype)),]
 #df.plot <- data.frame(df.scores)
 
-pcs <- c(1,2)
+pcs <- c(5, 6)
 plot_ly(
   x = df.plot[,pcs[1]],
   y = df.plot[,pcs[2]],
@@ -337,7 +346,7 @@ plot_ly(
   mode = "markers",
   #colors = "PuOr",
   marker = list(size=8),
-  color=df.plot[,"daytype"],
+  color=df.plot[,"month"],
   text = rownames(df.plot)
 ) %>% layout(
   #title = sprintf("Scores for region %s", region),
@@ -368,15 +377,15 @@ project.unit <- function(unit, x=x.smooth, nb.pc=4) {
   return(res)
 }
 
-unit <- sample(colnames(df_fda), size = 1)
+unit <- sample(rownames(df.scores), size = 1)
 par(mfrow=c(1,1))
 plot(x=t, y=df_fda_scaled[,unit], lty=1, col='blue', lwd=2, main=unit, xlim = c(0,24))
 lines(x=x.smooth, s.values[,unit], lty=1, col='blue', lwd=2)
-lines(x=x.smooth, project.unit(unit, nb.pc = 1), col='red', main=unit, lwd=2)
+#lines(x=x.smooth, project.unit(unit, nb.pc = 1), col='red', main=unit, lwd=2)
 lines(x=x.smooth, project.unit(unit, nb.pc = 2), col='red', main=unit, lwd=2, lty=2)
 lines(x=x.smooth, project.unit(unit, nb.pc = 3), col='red', main=unit, lwd=2, lty=3)
-lines(x=x.smooth, project.unit(unit, nb.pc = 4), col='red', main=unit, lwd=2, lty=4)
-lines(x=x.smooth, project.unit(unit, nb.pc = 6), col='red', main=unit, lwd=2, lty=5)
+#lines(x=x.smooth, project.unit(unit, nb.pc = 4), col='red', main=unit, lwd=2, lty=4)
+#lines(x=x.smooth, project.unit(unit, nb.pc = 6), col='red', main=unit, lwd=2, lty=5)
 legend("topleft", legend=c("Original", "Smoothed", "1 PC", "2 PCs", "3 PCs", "4 PCs", "6 PCs"),
        col=c("blue", "blue", "red", "red", "red", "red", "red"),
        lty=c(NA, 1, 1, 2, 3, 4, 5),
