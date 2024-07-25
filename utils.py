@@ -33,16 +33,16 @@ month_mapping = {
 month_to_season = {
     1: "Winter",
     2: "Winter",
-    3: "Spring",
+    3: "Winter",
     4: "Spring",
     5: "Spring",
-    6: "Summer",
+    6: "Spring",
     7: "Summer",
     8: "Summer",
-    9: "Fall",
+    9: "Summer",
     10: "Fall",
     11: "Fall",
-    12: "Winter"
+    12: "Fall"
 }
 
 ### Functions ###
