@@ -183,7 +183,7 @@ class PenNMF:
         C,S = argmin ||X-CS||^2 + alpha * ||BCA - Y||^2
 
     """
-    def __init__(self, n_components, alpha, tol=1e-4, max_iter=200, verbose=0):
+    def __init__(self, n_components, alpha, tol=1e-5, max_iter=10000, verbose=0):
         self.n_components = n_components
         self.alpha = alpha
         self.tol = tol
@@ -215,11 +215,12 @@ class PenNMF:
         return C
     
     
-    def transform(self, X, C_init):
+    def transform(self, X, C_init=None):
         """Compute the concentrations associated to a new data matrix X, with learnt profiles S.
 
         Args:
             X (2D array): The new data matrix for which the concentrations must be estimated
+            C_init (2D array, optional): A possible initial value for the concentrations. Default is None, where C is initialised at random.
         """
         if not hasattr(self, "components_"):
             raise NotFittedError("The PenNMF instance is not fitted yet. Call 'fit_transform' with "
@@ -227,7 +228,15 @@ class PenNMF:
         
         # In this case we just want to estimate the concentrations
         # we do not consider the contraint on C
-        Y, A, B, alpha = 0, 0, 0, 0
+        alpha = 0
+        # We just set a null value of the matrices for compatibility in the code
+        Y = np.zeros((1,1))
+        A = np.zeros((self.n_components_, 1))
+        B = np.zeros((1, len(X)))
+
+        if C_init is None:
+            C_init = np.random.rand(len(X), self.n_components_)
+            C_init = C_init / C_init.sum(axis=1, keepdims=True) # Normalize to "project on simplex"
         
         C, *_ = _fit_transform(X, C_init, self.components_, Y, A, B, alpha, self.max_iter, self.tol, fit=False, verbose=self.verbose)
 
