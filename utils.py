@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 from sklearn.metrics import pairwise_distances_argmin
 from scipy.spatial.distance import cdist, euclidean
 import warnings
@@ -158,6 +159,30 @@ class NotFittedError(ValueError, AttributeError):
 class ConvergenceWarning(UserWarning):
     pass
 
+def functional_norm(y, h):
+    n = len(y) - 1
+    res = 0
+    for i in range(n):
+        res += y[i] + y[i+1]
+    return res * h / 2
+
+def normalize_curves(data):
+    """Normalize curves in a dataframe or 2-dimensional array."""
+    if isinstance(data, pd.DataFrame):
+        h = 24 / (data.shape[1]-1)
+        norm_data = data.apply(lambda row: functional_norm(row, h), axis=1, raw=True)
+        return data.div(norm_data, axis=0)
+    elif isinstance(data, np.ndarray):
+        h = 24 / (data.shape[1]-1)
+        norm_data = np.apply_along_axis(lambda row: functional_norm(row, h), axis=1, arr=data)
+        return data / norm_data[:, np.newaxis]
+    else:
+        raise ValueError("Input must be either a DataFrame or a 2-dimensional numpy array.")
+
+def initialize_C(X, n_components):
+    C = pd.DataFrame(np.random.rand(len(X), n_components), index=X.index, columns=[f"Component {k+1}" for k in range(n_components)])
+    C = C.div(C.sum(axis=1), axis=0)
+    return C
 
 def plot_components(H, ax=None, figsize=(10, 6), labels=None, emphasize_comp=None, **kwargs):
     if ax is None:

@@ -3,6 +3,7 @@ import numpy as np
 import argparse
 from tqdm import trange
 from sklearn.decomposition import NMF
+from utils import normalize_curves, initialize_W
 
 # Parameters of solver
 random_state = None
@@ -11,31 +12,6 @@ init = 'custom'
 max_iter = 10000
 solver = 'mu'
 verbose = 0
-
-def functional_norm(y, h):
-    n = len(y) - 1
-    res = 0
-    for i in range(n):
-        res += y[i] + y[i+1]
-    return res * h / 2
-
-def normalize_curves(data):
-    """Normalize curves in a dataframe or 2-dimensional array."""
-    if isinstance(data, pd.DataFrame):
-        h = 24 / (data.shape[1]-1)
-        norm_data = data.apply(lambda row: functional_norm(row, h), axis=1, raw=True)
-        return data.div(norm_data, axis=0)
-    elif isinstance(data, np.ndarray):
-        h = 24 / (data.shape[1]-1)
-        norm_data = np.apply_along_axis(lambda row: functional_norm(row, h), axis=1, arr=data)
-        return data / norm_data[:, np.newaxis]
-    else:
-        raise ValueError("Input must be either a DataFrame or a 2-dimensional numpy array.")
-
-def initialize_W(X, n_components):
-    W = pd.DataFrame(np.random.rand(len(X), n_components), index=X.index, columns=[f"Component {k+1}" for k in range(n_components)])
-    W = W.div(W.sum(axis=1), axis=0)
-    return W
 
 def main(n_components, n_runs, infile, outfile):
     # Load matrix X
