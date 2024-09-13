@@ -1,9 +1,13 @@
+import sys
+import os
+sys.path.append(os.path.abspath('..')) # for importing from python files not in the same directory
+
 import pandas as pd
 import numpy as np
 import argparse
 from tqdm import trange
 from PenNMF import PenNMF
-from NMF_iter import normalize_curves, initialize_W
+from utils import normalize_curves, initialize_C
 from utils import month_to_season
 import pickle
 
@@ -39,15 +43,7 @@ def initialize_C_gaussian_prior(C_init_mean, sd=0.02):
     C_init = C_init_mean + noise # Add the noise
     return C_init.div(C_init.sum(axis=1), axis=0) # normalize the concentrations
 
-def main(n_components, alpha, train_years, n_runs, init, infile, outfile):
-    # Load matrices for BSS
-    with open('data/2_processed/PenNMF/B_{}.pkl'.format('_'.join(train_years)), 'rb') as file:
-        B = pickle.load(file)
-    B = B.loc[B.index.month.map(month_to_season).isin(seasons), B.columns.str[11:13].astype(int).map(month_to_season).isin(seasons)] # HOTFIX: Select only seaons of interest
-
-    Y = pd.read_pickle('data/2_processed/PenNMF/Y_{}.pkl'.format('_'.join(train_years)))
-    Y = Y[Y.index.month.map(month_to_season).isin(seasons)] # HOTFIX: Select only period of interest
-
+def main(n_components, alpha, beta, train_years, n_runs, init, infile, outfile):
     # Load matrix X
     input_df = pd.read_csv(infile, index_col=0)
     unit_info = input_df.index.str.extract(r'^(?P<region>[\w.]+)_(?P<year>\d{4})-(?P<month>\d{2})-\d{2}_(?P<daytype>[\w ]+)$').set_index(input_df.index)
@@ -56,15 +52,35 @@ def main(n_components, alpha, train_years, n_runs, init, infile, outfile):
     df = df[df.year.isin(train_years)]
     X = df.drop(unit_info.columns, axis=1)
     X = normalize_curves(X)
-
+    
     n = len(X)
     p = len(X.columns)
 
-    H_results = np.zeros((n_components, p, n_runs))
-    W_results = np.zeros((n, n_components, n_runs))
+    # Load matrices for BSS
+    with open('../data/2_processed/PenNMF/B_{}.pkl'.format('_'.join(train_years)), 'rb') as file:
+        B = pickle.load(file)
+    B = B.loc[B.index.month.map(month_to_season).isin(seasons), B.columns.str[11:13].astype(int).map(month_to_season).isin(seasons)] # HOTFIX: Select only seaons of interest
+
+    Y = pd.read_pickle('../data/2_processed/PenNMF/Y_{}.pkl'.format('_'.join(train_years)))
+    Y = Y[Y.index.month.map(month_to_season).isin(seasons)] # HOTFIX: Select only period of interest
+
+    E = np.eye(n_components)
+    Z = np.ones((n_components, 1))
+
+    # Creating matrix D is a little more complicated as the multiplication of each row of S with the column matrix D should give the functional norm
+    # The lines below essentially consist in writing the functional_norm as a vectorized function
+    D = np.ones((p, 1))
+    D[0, 0] = 0.5
+    D[-1, 0] = 0.5
+    h = 24 / (p-1)
+    D = h * D
+
+    S_results = np.zeros((n_components, p, n_runs))
+    C_results = np.zeros((n, n_components, n_runs))
     iterations = np.zeros(n_runs)
     loss_nmf = np.zeros(n_runs)
-    loss_constraint = np.zeros(n_runs)
+    loss_constraint_c = np.zeros(n_runs)
+    loss_constraint_s = np.zeros(n_runs)
     estimators = []
 
     # # HOTFIX: Select subset for C_init_mean:
@@ -73,7 +89,7 @@ def main(n_components, alpha, train_years, n_runs, init, infile, outfile):
     for i in trange(n_runs):
         # Initialize W matrix with rows uniformely sampled on the simplex(n_components)
         if init == 'uniform':
-            C_init = initialize_W(X, n_components)
+            C_init = initialize_C(X, n_components)
         # elif init == 'gaussian':
         #     C_init = initialize_C_gaussian_prior(C_init_mean)
         S_init = normalize_curves(np.ones((n_components, p)))
@@ -82,6 +98,7 @@ def main(n_components, alpha, train_years, n_runs, init, infile, outfile):
         model = PenNMF(
             n_components=n_components,
             alpha=alpha,
+            beta=beta,
             tol=tol,
             max_iter=max_iter,
             verbose=verbose
@@ -94,20 +111,24 @@ def main(n_components, alpha, train_years, n_runs, init, infile, outfile):
             S_init,
             Y.values,
             A,
-            B.values
+            B.values,
+            Z,
+            D,
+            E
         )
 
         S = model.components_
 
         # Store solution in the results tensors
-        H_results[...,i] = S
-        W_results[...,i] = C
+        S_results[...,i] = S
+        C_results[...,i] = C
         iterations[i] = model.n_iter_
         loss_nmf[i] = model.losses_nmf_[-1]
-        loss_constraint[i] = model.losses_constraint_[-1]
+        loss_constraint_c[i] = model.losses_constraint_c_[-1]
+        loss_constraint_s[i] = model.losses_constraint_s_[-1]
         estimators.append(model)
 
-    np.savez(outfile, H_results=H_results, W_results=W_results, iterations=iterations, loss_nmf=loss_nmf, loss_constraint=loss_constraint)
+    np.savez(outfile, S_results=S_results, C_results=C_results, iterations=iterations, loss_nmf=loss_nmf, loss_constraint_c=loss_constraint_c, loss_constraint_s=loss_constraint_s)
     print("Saved results at", outfile)
     estimators_outfile = outfile.replace('.npz', '.pkl')
     with open( estimators_outfile, 'wb') as file:
@@ -116,13 +137,14 @@ def main(n_components, alpha, train_years, n_runs, init, infile, outfile):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run NMF for daily load curves")
+    parser = argparse.ArgumentParser(description="Run PenNMF for daily load curves")
     parser.add_argument("--n_comp", dest="n_components", type=int, help="Number of components")
     parser.add_argument("--alpha", dest="alpha", type=float, help="alpha parameter")
-    parser.add_argument("--train_years", dest="train_years", type=str, nargs='+', help="Output file for the NMF results")
+    parser.add_argument("--beta", dest="beta", type=float, help="beta parameter")
+    parser.add_argument("--train_years", dest="train_years", type=str, nargs='+', help="Specific training years on which the model should be fitted")
     parser.add_argument("--n_runs", dest="n_runs", type=int, help="Number of runs")
     parser.add_argument("--init", dest="init", type=str, help="Initialization mode, 'uniform' or 'gaussian'")
     parser.add_argument("--infile", dest="infile", type=str, help="Input file for the daily load curves")
     parser.add_argument("--outfile", dest="outfile", type=str, help="Output file for the NMF results")
     args = parser.parse_args()
-    main(args.n_components, args.alpha, args.train_years, args.n_runs, args.init,  args.infile, args.outfile)
+    main(args.n_components, args.alpha, args.beta, args.train_years, args.n_runs, args.init,  args.infile, args.outfile)
