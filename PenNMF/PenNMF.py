@@ -251,7 +251,7 @@ class PenNMF:
         return C
     
     
-    def transform(self, X, C_init=None):
+    def transform(self, X, C_init=None, random_state=None):
         """Compute the concentrations associated to a new data matrix X, with learnt profiles S.
 
         Args:
@@ -274,8 +274,11 @@ class PenNMF:
         D = np.zeros((X.shape[1], 1))
         E = np.zeros((1, self.n_components_))
 
+        # Initialize random generator
+        rng = np.random.RandomState(random_state)
+
         if C_init is None:
-            C_init = np.random.rand(X.shape[0], self.n_components_)
+            C_init = rng.rand(X.shape[0], self.n_components_)
             C_init = C_init / C_init.sum(axis=1, keepdims=True) # Normalize to "project on simplex"
         
         C, *_ = _fit_transform(X, C_init, self.components_, Y, A, B, Z, D, E, alpha, beta, self.max_iter, self.tol, fit=False, verbose=self.verbose)
