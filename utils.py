@@ -196,7 +196,7 @@ def plot_components(H, ax=None, figsize=(10, 6), labels=None, emphasize_comp=Non
         if labels:
             label = labels[k]
         else:
-            label = f'Component {k + 1}'
+            label = f'$S_{k + 1}$'
         if emphasize_comp and emphasize_comp != k + 1:
             alpha = 0.2
         else:
@@ -206,6 +206,6 @@ def plot_components(H, ax=None, figsize=(10, 6), labels=None, emphasize_comp=Non
     ax.set_xlabel('Hour')
     ax.set_ylabel('Normalized Load')
     # ax.set_title(title)
-    ax.legend(loc='upper left')
+    ax.legend(loc='upper left', title='Sources')
     
     return fig, ax
