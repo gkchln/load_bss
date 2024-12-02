@@ -4,8 +4,20 @@ from sklearn.metrics import pairwise_distances_argmin
 from scipy.spatial.distance import cdist, euclidean
 import warnings
 import matplotlib.pyplot as plt
+from itertools import permutations, product
 
 ### Calendar utils ###
+hour_loss_days = [
+    "2018-03-25",
+    "2019-03-31",
+    "2020-03-29",
+    "2021-03-28",
+    "2022-03-27",
+    "2023-03-26",
+    "2024-03-31",
+    "2025-03-30"
+]
+
 weekday_mapping = {
     0: "Monday",
     1: "Tuesday",
@@ -45,6 +57,17 @@ month_to_season = {
     11: "Fall",
     12: "Fall"
 }
+
+### Geographic utils ###
+zones = [
+    'Calabria',
+    'Centre-North',
+    'Centre-South',
+    'North',
+    'Sardinia',
+    'Sicily',
+    'South'
+]
 
 ### Functions ###
 def get_string_color(color, opacity=1):
@@ -151,14 +174,6 @@ def squared_norm(x):
         )
     return np.dot(x, x)
 
-
-# Exceptions  used in PenNMF
-class NotFittedError(ValueError, AttributeError):
-    pass
-
-class ConvergenceWarning(UserWarning):
-    pass
-
 def functional_norm(y, h):
     n = len(y) - 1
     res = 0
@@ -178,11 +193,42 @@ def normalize_curves(data):
         return data / norm_data[:, np.newaxis]
     else:
         raise ValueError("Input must be either a DataFrame or a 2-dimensional numpy array.")
+    
+def align_components(S_results, C_results, A, models, ref_idx=0):
+    """Reorder the columns of C and the rows of S for each solution in a batch so that matrices can directly be compared between solutions.
+    The reordering must be done within groups of sources belonging to the same sector, which is an information given by the matrix A
 
-def initialize_C(X, n_components):
-    C = pd.DataFrame(np.random.rand(len(X), n_components), index=X.index, columns=[f"Component {k+1}" for k in range(n_components)])
-    C = C.div(C.sum(axis=1), axis=0)
-    return C
+    Args:
+        S_results (3d array): 3-dimensional array of shape (K, p, n_solutions), containing the sources for each solution
+        C_results (3d array): 3-dimensional array of shape (n, K, n_solutions), containing the concentrations for each solution
+        A (2d array): matrix containing the mapping between sources and sectors
+        models (list of LCNMF instances): list of length n_solutions, containing the fitted LCNMF objects for each solution
+        ref_idx (int, optional): Index of the reference solution on which the matrices should be aligned. Defaults to 0.
+    """
+    n_comp, n_eval_points, n_runs = S_results.shape
+    ref_H = S_results[..., ref_idx]
+
+    for n in range(1, n_runs):
+
+        best_permutation = list(range(n_comp))
+        eval_points = np.arange(0, n_eval_points, int(n_eval_points / 24))
+        best_alignment = np.linalg.norm(ref_H - S_results[..., n][range(n_comp), :], 'fro')
+
+        sources_groups = [np.nonzero(A[:, i])[0] for i in range(A.shape[1])]
+        valid_permutations = product(*[permutations(a) for a in sources_groups])
+        valid_permutations = [[item for subtuple in permutation for item in subtuple] for permutation in valid_permutations]
+        for permutation in valid_permutations:
+            alignment = np.linalg.norm(ref_H - S_results[..., n][list(permutation)[:n_comp], :], 'fro')
+
+            if alignment < best_alignment:
+                best_alignment = alignment
+                best_permutation = list(permutation)
+
+        S_results[..., n] = S_results[..., n][best_permutation, :]
+        C_results[..., n] = C_results[..., n][:, best_permutation]
+        model = models[n]
+        model.components_ = model.components_[best_permutation, :]
+        models[n] = model
 
 def plot_components(H, ax=None, figsize=(10, 6), labels=None, emphasize_comp=None, **kwargs):
     if ax is None:

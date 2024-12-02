@@ -1,11 +1,18 @@
-###########################################################
-####### Penalized Non-negative Matrix Factorisation #######
-###########################################################
+##############################################################################
+####### Linearly-Constrained Non-negative Matrix Factorisation (LCNMF) #######
+##############################################################################
+
 import warnings
 import time
 import numpy as np
 from numpy.linalg import multi_dot
-from utils import ConvergenceWarning, NotFittedError, squared_norm
+from utils import squared_norm
+
+class NotFittedError(ValueError, AttributeError):
+    pass
+
+class ConvergenceWarning(UserWarning):
+    pass
 
 EPSILON = np.finfo(np.float32).eps
 
@@ -206,7 +213,7 @@ def _fit_transform(X, C_init, S_init, Y, A, B, Z, D, E, alpha, beta, max_iter, t
         else:
             return C, S, n_iter
 
-class PenNMF:
+class LCNMF:
     """
     Penalized Non-negative Matrix Factorization:
 

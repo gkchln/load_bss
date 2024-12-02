@@ -5,89 +5,8 @@ library(stringr)
 library(progress)
 library(lubridate)
 
-# Read and process data -----------------------------------------------------------------------
-input_df <- read.csv2('data/2_processed/load_with_calendar.csv', sep = ",", header = TRUE,
-                      row.names = "Date")
-
-# HOTFIX: Add row for 00:00 of the day following the last day in the df (not executed for regional
-# data)
-input_df_2024 <- read.csv2("data/2_processed/load_2024_with_calendar.csv", sep = ",",
-                           header = TRUE, row.names = "Date")
-input_df <- rbind(input_df, input_df_2024[1,])
-
-# HOTFIX: Add value for Calabria 2021-01-01 00:00
-input_df['2021-01-01 00:00:00', 'Calabria'] <- 620
-
-# HOTFIX: handle na values for hour loss days 
-hour_loss_days = c(
-  "2018-03-25",
-  "2019-03-31",
-  "2020-03-29",
-  "2021-03-28",
-  "2022-03-27",
-  "2023-03-26"
-)
-rows.dup <- input_df[which((input_df$hour == 3) & input_df$day %in% hour_loss_days),]
-rows.dup.names <- rownames(rows.dup)
-rows.dup.names.new <- ymd_hms(rows.dup.names) - hours(1)
-rows.dup.names.new <- format(rows.dup.names.new, "%Y-%m-%d %H:%M:%S")
-rownames(rows.dup) <- rows.dup.names.new
-input_df <- rbind(input_df, rows.dup)
-input_df <- input_df[order(rownames(input_df)),]
-input_df[rownames(rows.dup), "hour"] <- 2
-
-load_cols = c("Calabria", "Centre.North", "Centre.South", "North", "Sardinia", "Sicily",
-              "South", "Italy")
-#load_cols <- colnames((input_df))[1:20]
-
-input_df[,load_cols] <- lapply(input_df[,load_cols], as.numeric)
-head(input_df)
-
-T <- nrow(input_df)
-
-# Operation to duplicate the load at midnight to add it as point of previous day and next day
-rows.dup <- input_df[which(input_df$hour == 0),]
-rows.dup.names <- rownames(rows.dup)
-rows.dup.names.new <- ymd_hms(rows.dup.names) - days(1) + hours(23) + minutes(59) + seconds(59)
-rows.dup.names.new <- format(rows.dup.names.new, "%Y-%m-%d %H:%M:%S")
-rownames(rows.dup) <- rows.dup.names.new
-
-df <- rbind(input_df, rows.dup)
-df <- df[order(rownames(df)),]
-
-cols.to.shift <- c("year", "day", "weekday", "weekofyear", "monthofyear", "season", "daytype")
-rows.to.shift <- grep("59$", rownames(df))[-1]
-
-df[rows.to.shift, "hour"] <- 24
-
-for (col in cols.to.shift) {
-  for (row in rows.to.shift) {
-    df[row, col] <- df[row-1, col]
-  }
-}
-n <- dim(df)[1]
-df <- df[2:(n-1),] # Remove first and last line corresponding to previous or posterior years
-
-# Pivot wider
-#zones <- load_cols
-zones <- c("Italy")
-# HOTFIX: select only a specific season
-seasons <- c("Winter", "Spring", "Summer", "Fall")
-#df_fda <- df[,c(zones, "day", "daytype", "hour")]
-df_fda <- df[df$season %in% seasons, c(zones, "day", "daytype", "hour")]
-df_fda <- pivot_wider(df_fda, id_cols = "hour", names_from = c(day, daytype), values_from = all_of(zones))
-
-# HOTFIX: Check that there are no NA except from Calabria data before 2021
-df_fda[, colSums(is.na(df_fda)) > 0 & !grepl("Calabria_2018|Calabria_2019|Calabria_2020", colnames(df_fda))]
-
-df_fda <- df_fda[,colSums(is.na(df_fda)) == 0]
-df_fda <- as.data.frame(df_fda)
-rownames(df_fda) <- as.numeric(df_fda$hour)
-df_fda$hour <- NULL
-file_path <- 'data/2_processed/daily_curves_Italy.csv'
-write.csv(t(df_fda), file = file_path, row.names = TRUE)
-#df_fda <- t(read.csv(file_path, row.names = 1, check.names = FALSE))
-colnames(df_fda) <- paste("Italy_", colnames(df_fda), sep = "")
+file_path <- 'data/daily_curves.csv'
+df_fda <- t(read.csv(file_path, row.names = 1, check.names = FALSE))
 
 # Smoothing ----------------------------------------------------
 T <- 24
@@ -198,8 +117,8 @@ rownames(s.values) <- eval.grid
 
 # Export the smoothed curves
 smoothed.curves <- t(sweep(s.values, 2, l1_norm, "*"))
-write.csv(smoothed.curves, file = 'data/2_processed/daily_curves_Italy_smoothed_15min.csv',
-          row.names = TRUE)
+#write.csv(smoothed.curves, file = 'data/2_processed/daily_curves_Italy_smoothed_15min.csv',
+#          row.names = TRUE)
 
 plot.full.smoothed.curve <- function(df_fda, s.values) {
   unit <- sample(colnames(df_fda), size = 1)
@@ -233,7 +152,7 @@ par(mfrow=c(1,1))
 plot(cumsum(fpca$varprop), type = "b", xlab = "Number of Components", ylab = "Cumulative Proportion of Variance",
      ylim = c(0, 1), pch = 19, xaxt = "n", main=NULL)
 axis(1, at = 1:length(fpca$varprop), labels = 1:length(fpca$varprop)) # Adding xticks
-abline(v = 2, col = "red", lty = 2) # Adding a vertical dashed line at elbow
+abline(v = 4, col = "red", lty = 2) # Adding a vertical dashed line at elbow
 grid() # Adding gridlines
 
 plt <- plot_ly(
