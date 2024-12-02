@@ -93,12 +93,12 @@ def get_load_data(url, access_token, date_from, date_to):
 
 
 ### Script parameters ###
-last_day_previous_month = (datetime.today().replace(day=1) - timedelta(days=1)).date()
-first_day_previous_month = last_day_previous_month.replace(day=1)
+# last_day_previous_month = (datetime.today().replace(day=1) - timedelta(days=1)).date()
+# first_day_previous_month = last_day_previous_month.replace(day=1)
 
 # By default we retrieve all data for last month
-date_from = first_day_previous_month.strftime('%Y-%m-%d')
-date_to = last_day_previous_month.strftime('%Y-%m-%d')
+date_from = "2024-11-01"
+date_to = "2024-11-30"
 outfile = 'data/load_last_month.csv'
 
 ### Main ###
