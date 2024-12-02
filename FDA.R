@@ -1,9 +1,6 @@
 library(fda)
-library(tidyr)
 library(plotly)
 library(stringr)
-library(progress)
-library(lubridate)
 
 file_path <- 'data/daily_curves.csv'
 df_fda <- t(read.csv(file_path, row.names = 1, check.names = FALSE))
@@ -303,7 +300,7 @@ lines(x=x.smooth, s.values[,unit], lty=1, col='blue', lwd=2)
 #lines(x=x.smooth, project.unit(unit, nb.pc = 1), col='red', main=unit, lwd=2)
 lines(x=x.smooth, project.unit(unit, nb.pc = 2), col='red', main=unit, lwd=2, lty=2)
 lines(x=x.smooth, project.unit(unit, nb.pc = 3), col='red', main=unit, lwd=2, lty=3)
-#lines(x=x.smooth, project.unit(unit, nb.pc = 4), col='red', main=unit, lwd=2, lty=4)
+lines(x=x.smooth, project.unit(unit, nb.pc = 4), col='red', main=unit, lwd=2, lty=4)
 #lines(x=x.smooth, project.unit(unit, nb.pc = 6), col='red', main=unit, lwd=2, lty=5)
 legend("topleft", legend=c("Original", "Smoothed", "1 PC", "2 PCs", "3 PCs", "4 PCs", "6 PCs"),
        col=c("blue", "blue", "red", "red", "red", "red", "red"),
@@ -312,7 +309,7 @@ legend("topleft", legend=c("Original", "Smoothed", "1 PC", "2 PCs", "3 PCs", "4 
        lwd=2,
        title="Legend Title")
 
-# 3 PCs seems really good
+# 4 PCs seems really good
 
 
 ## Exporting the PCA reconstruction of the data ------------------------------------------------
