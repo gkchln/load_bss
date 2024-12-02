@@ -13,6 +13,12 @@ data/
 documents/
 plots/
 
+# Virtual environment
+bss/
+
+# direnv
+.envrc
+
 # Distribution / packaging
 .Python
 build/
