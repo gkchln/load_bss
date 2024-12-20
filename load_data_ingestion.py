@@ -97,9 +97,9 @@ def get_load_data(url, access_token, date_from, date_to):
 # first_day_previous_month = last_day_previous_month.replace(day=1)
 
 # By default we retrieve all data for last month
-date_from = "2024-11-01"
-date_to = "2024-11-30"
-outfile = 'data/load_last_month.csv'
+date_from = "2023-01-01"
+date_to = "2023-12-31"
+outfile = 'data/load_2023.csv'
 
 ### Main ###
 if __name__ == "__main__":

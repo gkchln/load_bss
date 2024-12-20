@@ -22,7 +22,7 @@ logging.basicConfig(
 )
 
 consumption_file = 'data/1_input/consumption/consumption.xlsx'
-imser_file = 'data/1_input/indicators/IMSER2.xlsx'
+imser_file = 'data/1_input/indicators/IMSER.xlsx'
 imcei_file = 'data/1_input/indicators/IMCEI_mensile.xlsx'
 enel_files = [
     'data/1_input/indicators/Domestico 2020 e 2021.xlsx', 
@@ -129,12 +129,18 @@ tol = 1e-5
 max_iter = 10000
 verbose = 0
 
-def initialize_C(X, n_components):
-    C = pd.DataFrame(np.random.rand(len(X), n_components), index=X.index, columns=[f"Component {k+1}" for k in range(n_components)])
+def initialize_C(X, n_components, random_state=None):
+    if random_state is not None:
+        np.random.seed(random_state)  # Set the random seed for reproducibility
+    C = pd.DataFrame(
+        np.random.rand(len(X), n_components), 
+        index=X.index, 
+        columns=[f"Component {k+1}" for k in range(n_components)]
+    )
     C = C.div(C.sum(axis=1), axis=0)
     return C
 
-def main(n_components, alpha, beta, n_runs, infile, outfile):
+def main(n_components, alpha, beta, n_runs, infile, outfile, random_state):
     logging.info("Reading input files and creating matrices")
     curves_df = pd.read_csv(infile, index_col=0)
     curves_info = get_curves_info(curves_df)
@@ -170,7 +176,12 @@ def main(n_components, alpha, beta, n_runs, infile, outfile):
     logging.info("Start running the {} monte-carlo simulations of the blind separation...".format(n_runs))
     for i in trange(n_runs):
         # Initialize C matrix with rows uniformely sampled on the simplex(n_components)
-        C_init = initialize_C(X, n_components)
+        # The complex random_state specification is to avoid to have replicate draws of C_init with two different values of random_state
+        # (the one defined in the main() function) e.g. if main(..., n_runs=1000, random_state=42) is called, 1000 calls
+        # initialize_C(..., random_state=42000), initialize_C(..., random_state=42001), ..., initialize_C(..., random_state=42999)
+        # will be performed and none of them will be overlap with the calls initialize_C(..., random_state=43000),
+        # initialize_C(..., random_state=43001), ..., initialize_C(..., random_state=43999) if main(..., n_runs=1000, random_state=43) is called
+        C_init = initialize_C(X, n_components, random_state=n_runs * random_state + i)
         # Initialise S matrix with equal values
         S_init = normalize_curves(np.ones((n_components, p)))
 
@@ -226,7 +237,8 @@ if __name__ == "__main__":
     parser.add_argument("--n_runs", dest="n_runs", type=int, help="Number of runs")
     parser.add_argument("--infile", dest="infile", type=str, help="Input file for the daily load curves")
     parser.add_argument("--outfile", dest="outfile", type=str, help="Output file for the LCNMF results")
+    parser.add_argument("--random_state", dest="random_state", type=int, default=None, help="Seed for random number generator (default: None)")
     args = parser.parse_args()
-    main(args.n_components, args.alpha, args.beta, args.n_runs,  args.infile, args.outfile)
+    main(args.n_components, args.alpha, args.beta, args.n_runs, args.infile, args.outfile, args.random_state)
 
 # %%

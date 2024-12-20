@@ -106,8 +106,8 @@ def preprocess_load(input_df, zonal=False):
 
 
 ### Script parameters ###
-infile = 'data/load_2020_to_2022.csv'
-outfile = 'data/daily_curves_2020_to_2022.csv'
+infile = 'data/load_2023.csv'
+outfile = 'data/daily_curves_2023.csv'
 zonal = False
 
 if __name__ == "__main__":
